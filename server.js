@@ -116,6 +116,44 @@ app.get('/api/scores/multiplayer', (req, res) => {
   }
 });
 
+// Limpar base de dados (protegido com token simples)
+app.delete('/api/scores/clear', (req, res) => {
+  try {
+    // Proteção simples com token (podes mudar este token)
+    const token = req.headers['x-clear-token'] || req.query.token;
+    const SECRET_TOKEN = process.env.CLEAR_DB_TOKEN || 'change-this-token-in-production';
+    
+    if (token !== SECRET_TOKEN) {
+      return res.status(401).json({ success: false, error: 'Token inválido' });
+    }
+    
+    console.log('🧹 Limpando base de dados...');
+    
+    // Limpar tabelas
+    db.exec(`
+      DELETE FROM single_scores;
+      DELETE FROM multiplayer_scores;
+      VACUUM;
+    `);
+    
+    // Verificar contagens
+    const singleCount = db.prepare('SELECT COUNT(*) as count FROM single_scores').get();
+    const multiCount = db.prepare('SELECT COUNT(*) as count FROM multiplayer_scores').get();
+    
+    console.log(`✅ Base de dados limpa! Single: ${singleCount.count}, Multi: ${multiCount.count}`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Base de dados limpa com sucesso',
+      singleCount: singleCount.count,
+      multiCount: multiCount.count
+    });
+  } catch (error) {
+    console.error('❌ Erro ao limpar base de dados:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Servir arquivos estáticos
 app.use(express.static(path.join(__dirname)));
 

@@ -211,7 +211,42 @@ const db = new Database(DB_PATH);
 - [ ] Firewall configurado (porta 80/443 aberta)
 - [ ] Testar o jogo em produção
 
-### 11. Comandos Úteis
+### 11. Limpar Base de Dados
+
+#### Opção A: Via API (Recomendado)
+
+```bash
+# Definir token de segurança (fazer apenas uma vez)
+export CLEAR_DB_TOKEN="seu-token-secreto-aqui"
+
+# Ou adicionar ao .env
+echo "CLEAR_DB_TOKEN=seu-token-secreto-aqui" >> /var/www/jogo-carros/.env
+
+# Limpar via API
+curl -X DELETE http://localhost:3000/api/scores/clear \
+  -H "x-clear-token: seu-token-secreto-aqui"
+
+# Ou via query parameter
+curl -X DELETE "http://localhost:3000/api/scores/clear?token=seu-token-secreto-aqui"
+```
+
+#### Opção B: Via SQLite direto
+
+```bash
+# No servidor
+cd /var/www/jogo-carros
+sqlite3 scores.db "DELETE FROM single_scores; DELETE FROM multiplayer_scores; VACUUM;"
+```
+
+#### Opção C: Usar script Node.js
+
+```bash
+# No servidor
+cd /var/www/jogo-carros
+node clear-db.js
+```
+
+### 12. Comandos Úteis
 
 ```bash
 # Ver logs do PM2
@@ -231,6 +266,10 @@ sudo tail -f /var/log/nginx/access.log
 curl http://localhost:3000
 
 # Verificar base de dados
+sqlite3 /var/www/jogo-carros/scores.db "SELECT COUNT(*) FROM single_scores;"
+sqlite3 /var/www/jogo-carros/scores.db "SELECT COUNT(*) FROM multiplayer_scores;"
+
+# Ver top 10 scores
 sqlite3 /var/www/jogo-carros/scores.db "SELECT * FROM single_scores ORDER BY score DESC LIMIT 10;"
 ```
 
