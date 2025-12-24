@@ -152,6 +152,8 @@ h3 {
     align-items: center;
     justify-content: center;
     text-align: center;
+    min-height: 60px;
+    line-height: 1.2;
 }
 
 .menu-btn::before {
@@ -309,6 +311,13 @@ h3 {
     display: flex;
     gap: 15px;
     margin-top: 20px;
+    width: 100%;
+}
+
+.form-buttons .menu-btn {
+    flex: 1;
+    margin: 0;
+    min-width: 0;
 }
 
 /* Seletor de cores */
