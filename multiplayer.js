@@ -41,6 +41,19 @@ socket.onAny((eventName, ...args) => {
     console.log('📨 Evento recebido do servidor:', eventName, args);
 });
 
+// Sistema de "login" com localStorage
+const STORAGE_KEY = 'jogoCarros_playerName';
+
+function savePlayerName(name) {
+    if (name && name.trim()) {
+        localStorage.setItem(STORAGE_KEY, name.trim());
+    }
+}
+
+function loadPlayerName() {
+    return localStorage.getItem(STORAGE_KEY) || '';
+}
+
 // Elementos do DOM - serão inicializados quando o DOM estiver pronto
 let mainMenu, lobby, customization, gameScreen;
 let playerNameInput, playerNameJoinInput;
@@ -389,6 +402,10 @@ function setupEventListeners() {
                 alert('Por favor, digite o teu nome!');
                 return;
             }
+            
+            // Guardar nome
+            savePlayerName(name);
+            
             const gameMode = confirmCreateBtn.dataset.gameMode || 'multiplayer';
             createRoom(gameMode, name);
         });
@@ -439,7 +456,40 @@ function setupEventListeners() {
     if (playAgainBtn) {
         playAgainBtn.addEventListener('click', () => {
             gameOver.classList.add('hidden');
-            showScreen('mainMenu');
+            
+            // Se ainda temos uma sala ativa, voltar ao lobby
+            if (currentRoomCode && lobby) {
+                console.log('🔄 Voltando ao lobby para jogar novamente...');
+                
+                // Limpar elementos do jogo
+                if (player1Car) player1Car.innerHTML = '';
+                if (player2Car) player2Car.innerHTML = '';
+                
+                // Resetar estado do jogo
+                gameStarted = false;
+                candies = {};
+                obstacles = {};
+                myCar = null;
+                otherCar = null;
+                
+                // Mostrar lobby
+                showScreen('lobby');
+                
+                // Atualizar lista de jogadores se ainda temos players
+                if (players && Object.keys(players).length > 0) {
+                    updatePlayersList(players);
+                }
+                
+                // Mostrar botão de personalização se for single-player
+                if (gameMode === 'single' && startCustomizationBtn) {
+                    startCustomizationBtn.style.display = 'block';
+                    startCustomizationBtn.textContent = 'Personalizar Carro';
+                }
+            } else {
+                // Se não há sala ativa, voltar ao menu inicial
+                console.log('🏠 Voltando ao menu inicial (sem sala ativa)');
+                showScreen('mainMenu');
+            }
         });
     }
     
@@ -502,9 +552,90 @@ function createEmojiPalette() {
         emojiItem.className = 'emoji-item';
         emojiItem.textContent = emoji;
         emojiItem.draggable = true;
+        
+        // Drag and drop para desktop
         emojiItem.addEventListener('dragstart', (e) => {
             draggedEmoji = emoji;
         });
+        
+        // Touch events para mobile/tablet - arrastar emoji para o carro
+        let touchStartX, touchStartY;
+        let isDraggingEmoji = false;
+        let dragPreview = null;
+        
+        emojiItem.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const touch = e.touches[0];
+            if (!touch) return;
+            
+            isDraggingEmoji = true;
+            draggedEmoji = emoji;
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            
+            // Criar preview visual do emoji a ser arrastado
+            dragPreview = document.createElement('div');
+            dragPreview.textContent = emoji;
+            dragPreview.style.position = 'fixed';
+            dragPreview.style.fontSize = '40px';
+            dragPreview.style.pointerEvents = 'none';
+            dragPreview.style.zIndex = '10000';
+            dragPreview.style.left = touch.clientX - 20 + 'px';
+            dragPreview.style.top = touch.clientY - 20 + 'px';
+            dragPreview.style.opacity = '0.8';
+            document.body.appendChild(dragPreview);
+        }, { passive: false });
+        
+        emojiItem.addEventListener('touchmove', (e) => {
+            if (!isDraggingEmoji || !dragPreview) return;
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const touch = e.touches[0];
+            if (!touch) return;
+            
+            // Atualizar posição do preview
+            dragPreview.style.left = touch.clientX - 20 + 'px';
+            dragPreview.style.top = touch.clientY - 20 + 'px';
+        }, { passive: false });
+        
+        emojiItem.addEventListener('touchend', (e) => {
+            if (!isDraggingEmoji) return;
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const touch = e.changedTouches[0];
+            if (!touch) {
+                cleanupDrag();
+                return;
+            }
+            
+            // Verificar se o toque terminou sobre o carPreview
+            const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+            if (elementBelow && (carPreview.contains(elementBelow) || elementBelow === carPreview)) {
+                const rect = carPreview.getBoundingClientRect();
+                const x = touch.clientX - rect.left;
+                const y = touch.clientY - rect.top;
+                
+                // Adicionar emoji ao carro
+                if (draggedEmoji) {
+                    addEmojiToCar(draggedEmoji, x, y);
+                }
+            }
+            
+            cleanupDrag();
+        }, { passive: false });
+        
+        function cleanupDrag() {
+            isDraggingEmoji = false;
+            draggedEmoji = null;
+            if (dragPreview) {
+                dragPreview.remove();
+                dragPreview = null;
+            }
+        }
+        
         emojiList.appendChild(emojiItem);
     });
 }
@@ -527,23 +658,15 @@ function setupCustomizationDragDrop() {
         draggedEmoji = null;
     });
     
-    // Touch events para mobile/tablet
-    carPreview.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        const touch = e.touches[0];
-        if (!touch) return;
-        
-        const element = e.target;
-        if (element.classList.contains('emoji-item')) {
-            // Iniciar arrasto de emoji
-            draggedEmoji = element.textContent;
-            const rect = carPreview.getBoundingClientRect();
-            const x = touch.clientX - rect.left;
-            const y = touch.clientY - rect.top;
-            addEmojiToCar(draggedEmoji, x, y);
-            draggedEmoji = null;
-        }
-    }, { passive: false });
+    // Touch events para mobile/tablet - permitir soltar emoji no carPreview
+    carPreview.addEventListener('touchmove', (e) => {
+        // Permitir que o touch move funcione para arrastar emojis já no carro
+        // Mas não interferir com o arrasto de novos emojis
+    }, { passive: true });
+    
+    carPreview.addEventListener('touchend', (e) => {
+        // Este evento é tratado no createEmojiPalette quando o emoji é solto
+    }, { passive: true });
 }
 
 function addEmojiToCar(emoji, x, y) {
@@ -588,9 +711,14 @@ function makeEmojiDraggable(element) {
         document.addEventListener('mouseup', stopDrag);
     });
     
-    // Touch events (mobile/tablet)
+    // Touch events (mobile/tablet) - para arrastar emojis já no carro
+    let longPressTimer = null;
+    
     element.addEventListener('touchstart', (e) => {
-        e.preventDefault();
+        // Verificar se o elemento está dentro do carPreview (já está no carro)
+        if (!carPreview.contains(element)) return;
+        
+        e.stopPropagation(); // Evitar conflito com outros touch handlers
         isDragging = true;
         const touch = e.touches[0];
         startX = touch.clientX;
@@ -598,8 +726,17 @@ function makeEmojiDraggable(element) {
         startLeft = parseFloat(element.style.left) || 0;
         startTop = parseFloat(element.style.top) || 0;
         
+        // Iniciar timer para toque longo (remover emoji)
+        longPressTimer = setTimeout(() => {
+            const emojiId = element.dataset.id;
+            myCustomization.emojis = myCustomization.emojis.filter(e => e.id != emojiId);
+            element.remove();
+            syncCustomization();
+            isDragging = false;
+        }, 1000); // 1 segundo para toque longo
+        
         document.addEventListener('touchmove', doDragTouch, { passive: false });
-        document.addEventListener('touchend', stopDrag);
+        document.addEventListener('touchend', stopDrag, { passive: false });
     }, { passive: false });
     
     function doDrag(e) {
@@ -617,6 +754,12 @@ function makeEmojiDraggable(element) {
         if (!isDragging) return;
         e.preventDefault();
         
+        // Cancelar toque longo se estiver a arrastar
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
+        
         const touch = e.touches[0];
         if (!touch) return;
         
@@ -631,6 +774,12 @@ function makeEmojiDraggable(element) {
     function stopDrag() {
         if (!isDragging) return;
         isDragging = false;
+        
+        // Cancelar toque longo
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
         
         // Atualizar dados
         const emojiId = element.dataset.id;
@@ -647,7 +796,7 @@ function makeEmojiDraggable(element) {
         document.removeEventListener('touchend', stopDrag);
     }
     
-    // Remover emoji com duplo clique ou toque longo
+    // Remover emoji com duplo clique
     element.addEventListener('dblclick', () => {
         const emojiId = element.dataset.id;
         myCustomization.emojis = myCustomization.emojis.filter(e => e.id != emojiId);
@@ -655,19 +804,7 @@ function makeEmojiDraggable(element) {
         syncCustomization();
     });
     
-    // Touch: toque longo para remover
-    let longPressTimer;
-    element.addEventListener('touchstart', (e) => {
-        longPressTimer = setTimeout(() => {
-            const emojiId = element.dataset.id;
-            myCustomization.emojis = myCustomization.emojis.filter(e => e.id != emojiId);
-            element.remove();
-            syncCustomization();
-        }, 800); // 800ms para toque longo
-    });
-    element.addEventListener('touchend', () => {
-        clearTimeout(longPressTimer);
-    });
+    // Nota: O toque longo para remover está integrado no touchstart do arrasto acima
 }
 
 function syncCustomization() {
@@ -869,6 +1006,9 @@ function createRoom(mode, name) {
         return;
     }
     
+    // Guardar nome
+    savePlayerName(name);
+    
     gameMode = mode;
     
     console.log('📤 Enviando createRoom:', { playerName: name, gameMode: mode, carColor: selectedCarColor });
@@ -912,6 +1052,9 @@ function joinRoom() {
         alert('Por favor, digite o teu nome!');
         return;
     }
+    
+    // Guardar nome
+    savePlayerName(name);
     
     if (code.length !== 6) {
         alert('Código deve ter 6 caracteres!');
@@ -1558,6 +1701,11 @@ socket.on('candyCollected', (data) => {
 socket.on('gameEnd', (data) => {
     gameStarted = false;
     
+    console.log('🎮 Game End recebido:', data);
+    console.log('📊 Players:', data.players);
+    console.log('🏆 Winner:', data.winner);
+    console.log('😢 Loser:', data.loser);
+    
     let message = '';
     if (data.winner && data.winner.id === myPlayerId) {
         gameOverTitle.textContent = '🎉 Ganhaste!';
@@ -1572,6 +1720,17 @@ socket.on('gameEnd', (data) => {
     
     gameOverMessage.textContent = message;
     gameOver.classList.remove('hidden');
+    
+    // Recarregar leaderboards após guardar
+    setTimeout(() => {
+        if (leaderboard && !leaderboard.classList.contains('hidden')) {
+            if (singleLeaderboardTab && singleLeaderboardTab.classList.contains('active')) {
+                loadSingleLeaderboard();
+            } else if (multiLeaderboardTab && multiLeaderboardTab.classList.contains('active')) {
+                loadMultiLeaderboard();
+            }
+        }
+    }, 1000);
 });
 
 socket.on('playerLeft', (data) => {

@@ -376,7 +376,19 @@ function startGame(roomCode) {
 // Finalizar jogo
 function endGame(roomCode, loserId, reason) {
   const room = rooms[roomCode];
-  if (!room || !room.gameStarted) return;
+  if (!room) {
+    console.warn(`⚠️ Sala ${roomCode} não encontrada para endGame`);
+    return;
+  }
+  if (!room.gameStarted) {
+    console.warn(`⚠️ Jogo na sala ${roomCode} não estava iniciado`);
+    return;
+  }
+  
+  console.log(`🎮 Finalizando jogo na sala ${roomCode}`);
+  console.log(`📊 Modo: ${room.gameMode}`);
+  console.log(`😢 Perdedor ID: ${loserId}`);
+  console.log(`📝 Razão: ${reason}`);
   
   room.gameStarted = false;
   
@@ -390,37 +402,50 @@ function endGame(roomCode, loserId, reason) {
   if (room.gameMode === 'single') {
     // Single player - guardar sempre que o jogo acabar (mesmo com score baixo)
     const player = playersArray[0];
-    if (player) {
+    if (player && player.name && player.score !== undefined) {
       const level = calculateLevel(player.score);
       try {
         const stmt = db.prepare('INSERT INTO single_scores (player_name, score, level) VALUES (?, ?, ?)');
-        stmt.run(player.name, player.score, level);
-        console.log(`✅ Score guardado: ${player.name} - ${player.score} pontos - Nível ${level}`);
+        const result = stmt.run(player.name, player.score, level);
+        console.log(`✅ Score SINGLE guardado: ${player.name} - ${player.score} pontos - Nível ${level} (ID: ${result.lastInsertRowid})`);
       } catch (error) {
-        console.error('Erro ao guardar score single:', error);
+        console.error('❌ Erro ao guardar score single:', error);
+        console.error('Dados:', { name: player.name, score: player.score, level });
       }
+    } else {
+      console.warn('⚠️ Player inválido para guardar score single:', player);
     }
   } else {
     // Multiplayer - guardar ambos os jogadores
     if (playersArray.length >= 1) {
       const player1 = playersArray[0];
       const player2 = playersArray[1] || null;
-      try {
-        const stmt = db.prepare(`
-          INSERT INTO multiplayer_scores (player1_name, player2_name, player1_score, player2_score, winner, game_mode)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `);
-        const winnerName = winner ? winner.name : (player1.score === player2?.score ? 'Empate' : (player1.score > (player2?.score || 0) ? player1.name : player2?.name));
-        stmt.run(
-          player1.name,
-          player2 ? player2.name : null,
-          player1.score,
-          player2 ? player2.score : null,
-          winnerName || 'Empate',
-          'multiplayer'
-        );
-      } catch (error) {
-        console.error('Erro ao guardar score multiplayer:', error);
+      
+      if (player1 && player1.name && player1.score !== undefined) {
+        try {
+          const stmt = db.prepare(`
+            INSERT INTO multiplayer_scores (player1_name, player2_name, player1_score, player2_score, winner, game_mode)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `);
+          const winnerName = winner ? winner.name : (player1.score === player2?.score ? 'Empate' : (player1.score > (player2?.score || 0) ? player1.name : player2?.name));
+          const result = stmt.run(
+            player1.name,
+            player2 ? player2.name : null,
+            player1.score,
+            player2 ? player2.score : null,
+            winnerName || 'Empate',
+            'multiplayer'
+          );
+          console.log(`✅ Score MULTIPLAYER guardado: ${player1.name} (${player1.score}) vs ${player2 ? player2.name + ' (' + player2.score + ')' : 'N/A'} - Vencedor: ${winnerName} (ID: ${result.lastInsertRowid})`);
+        } catch (error) {
+          console.error('❌ Erro ao guardar score multiplayer:', error);
+          console.error('Dados:', { 
+            player1: { name: player1.name, score: player1.score },
+            player2: player2 ? { name: player2.name, score: player2.score } : null
+          });
+        }
+      } else {
+        console.warn('⚠️ Player1 inválido para guardar score multiplayer:', player1);
       }
     }
   }
