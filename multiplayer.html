@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏎️ Sugar Rush - Corrida da Vanellope</title>
+    <link rel="stylesheet" href="multiplayer.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Tela Inicial -->
+        <div id="mainMenu" class="screen active">
+            <h1>🏎️ Sugar Rush 🍭</h1>
+            <p style="margin-bottom: 20px; font-size: 16px; opacity: 0.9;">Corrida da Vanellope!</p>
+            <div class="menu-content">
+                <!-- Menu Principal -->
+                <div id="mainMenuButtons" class="menu-buttons">
+                    <button id="createRoomBtn" class="menu-btn primary">Criar Corrida</button>
+                    <button id="joinRoomBtn" class="menu-btn secondary">Entrar com Código</button>
+                    <button id="singlePlayerBtn" class="menu-btn secondary">Jogar Sozinho</button>
+                    <button id="leaderboardBtn" class="menu-btn secondary">🏆 Classificações</button>
+                </div>
+                
+                <!-- Formulário para Criar Corrida / Jogar Sozinho -->
+                <div id="createRoomForm" class="game-form hidden">
+                    <h3>Configurar Corrida</h3>
+                    <input type="text" id="playerName" placeholder="Digite o seu nome" maxlength="20" class="form-input">
+                    
+                    <div class="color-selector">
+                        <label>Escolhe a cor do teu carro:</label>
+                        <div class="color-options">
+                            <div class="color-option" data-color="red" style="background: linear-gradient(135deg, #DC143C 0%, #FF1493 100%);"></div>
+                            <div class="color-option" data-color="blue" style="background: linear-gradient(135deg, #1E90FF 0%, #4169E1 100%);"></div>
+                            <div class="color-option" data-color="green" style="background: linear-gradient(135deg, #228B22 0%, #32CD32 100%);"></div>
+                            <div class="color-option" data-color="purple" style="background: linear-gradient(135deg, #8B008B 0%, #9370DB 100%);"></div>
+                            <div class="color-option" data-color="pink" style="background: linear-gradient(135deg, #C71585 0%, #FF1493 100%);"></div>
+                            <div class="color-option" data-color="cyan" style="background: linear-gradient(135deg, #008B8B 0%, #00CED1 100%);"></div>
+                            <div class="color-option" data-color="magenta" style="background: linear-gradient(135deg, #8B008B 0%, #FF00FF 100%);"></div>
+                            <div class="color-option" data-color="teal" style="background: linear-gradient(135deg, #008080 0%, #20B2AA 100%);"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-buttons">
+                        <button id="confirmCreateBtn" class="menu-btn primary">Confirmar</button>
+                        <button id="cancelCreateBtn" class="menu-btn secondary">Cancelar</button>
+                    </div>
+                </div>
+                
+                <!-- Formulário para Entrar com Código -->
+                <div id="joinRoomForm" class="game-form hidden">
+                    <h3>Entrar na Corrida</h3>
+                    <input type="text" id="playerNameJoin" placeholder="Digite o seu nome" maxlength="20" class="form-input">
+                    
+                    <div class="color-selector">
+                        <label>Escolhe a cor do teu carro:</label>
+                        <div class="color-options">
+                            <div class="color-option" data-color="red" style="background: linear-gradient(135deg, #DC143C 0%, #FF1493 100%);"></div>
+                            <div class="color-option" data-color="blue" style="background: linear-gradient(135deg, #1E90FF 0%, #4169E1 100%);"></div>
+                            <div class="color-option" data-color="green" style="background: linear-gradient(135deg, #228B22 0%, #32CD32 100%);"></div>
+                            <div class="color-option" data-color="purple" style="background: linear-gradient(135deg, #8B008B 0%, #9370DB 100%);"></div>
+                            <div class="color-option" data-color="pink" style="background: linear-gradient(135deg, #C71585 0%, #FF1493 100%);"></div>
+                            <div class="color-option" data-color="cyan" style="background: linear-gradient(135deg, #008B8B 0%, #00CED1 100%);"></div>
+                            <div class="color-option" data-color="magenta" style="background: linear-gradient(135deg, #8B008B 0%, #FF00FF 100%);"></div>
+                            <div class="color-option" data-color="teal" style="background: linear-gradient(135deg, #008080 0%, #20B2AA 100%);"></div>
+                        </div>
+                    </div>
+                    
+                    <input type="text" id="roomCodeInput" placeholder="Digite o código da sala" maxlength="6" class="form-input" style="text-transform: uppercase;">
+                    
+                    <div class="form-buttons">
+                        <button id="confirmJoinBtn" class="menu-btn primary">Entrar</button>
+                        <button id="cancelJoinBtn" class="menu-btn secondary">Cancelar</button>
+                    </div>
+                </div>
+                
+                <!-- Código da Sala -->
+                <div id="roomCodeSection" class="room-code-section hidden">
+                    <h3>Partilhe este código:</h3>
+                    <div class="room-code-display">
+                        <span id="roomCodeDisplay">------</span>
+                        <button id="copyCodeBtn" class="copy-btn">📋</button>
+                    </div>
+                    <p class="waiting-text">À espera de jogador...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela de Lobby -->
+        <div id="lobby" class="screen">
+            <h2>🏁 Sala: <span id="lobbyRoomCode">------</span></h2>
+            <div class="lobby-content">
+                <div id="playersList" class="players-list"></div>
+                <div id="lobbyStatus" class="status"></div>
+                <button id="startCustomizationBtn" class="menu-btn primary">Personalizar Carro</button>
+            </div>
+        </div>
+
+        <!-- Tela de Personalização -->
+        <div id="customization" class="screen">
+            <h2>🎨 Personalize o seu Carro</h2>
+            <div class="customization-content">
+                <div class="car-preview-area">
+                    <div id="carPreview" class="car-preview">
+                        <div class="car-base" id="carBase"></div>
+                        <!-- Emojis serão adicionados aqui via JS -->
+                    </div>
+                </div>
+                
+                <div class="emoji-palette">
+                    <h3>Arraste emojis para o carro:</h3>
+                    <div id="emojiList" class="emoji-list">
+                        <!-- Emojis serão adicionados via JS -->
+                    </div>
+                </div>
+                
+                <div class="customization-controls">
+                    <button id="clearEmojisBtn" class="control-btn">Limpar</button>
+                    <button id="readyToRaceBtn" class="menu-btn primary">Pronto para Correr!</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela de Jogo -->
+        <div id="gameScreen" class="screen">
+            <div class="game-header">
+                <div class="score-board">
+                    <div class="player-score left-score" id="player1Score">
+                        <span class="player-name" id="player1Name">Jogador 1</span>
+                        <span class="score-value" id="player1ScoreValue">100</span>
+                        <span class="level-badge" id="player1Level">Nível 1</span>
+                        <span class="lives-display" id="player1Lives">❤️❤️❤️</span>
+                        <span class="position-badge" id="player1Position"></span>
+                    </div>
+                    <div class="player-score right-score" id="player2Score">
+                        <span class="player-name" id="player2Name">Jogador 2</span>
+                        <span class="score-value" id="player2ScoreValue">100</span>
+                        <span class="level-badge" id="player2Level">Nível 1</span>
+                        <span class="lives-display" id="player2Lives">❤️❤️❤️</span>
+                        <span class="position-badge" id="player2Position"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="gameArea" class="game-area">
+                <div id="road" class="road"></div>
+                <div id="player1Car" class="car player1"></div>
+                <div id="player2Car" class="car player2"></div>
+            </div>
+            
+            <div id="gameOver" class="game-over hidden">
+                <h2 id="gameOverTitle">Fim de Jogo</h2>
+                <p id="gameOverMessage"></p>
+                <button id="playAgainBtn">Jogar Novamente</button>
+            </div>
+        </div>
+
+        <!-- Tela de Classificações -->
+        <div id="leaderboard" class="screen">
+            <h2>🏆 Classificações</h2>
+            <div class="leaderboard-content">
+                <div class="leaderboard-tabs">
+                    <button id="singleLeaderboardTab" class="tab-btn active">Single Player</button>
+                    <button id="multiLeaderboardTab" class="tab-btn">Multiplayer</button>
+                </div>
+                <div id="leaderboardList" class="leaderboard-list"></div>
+                <button id="backToMenuBtn" class="menu-btn primary">Voltar ao Menu</button>
+            </div>
+        </div>
+    </div>
+    <script src="multiplayer.js"></script>
+</body>
+</html>
