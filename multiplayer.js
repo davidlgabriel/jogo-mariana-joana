@@ -480,9 +480,12 @@ function setupEventListeners() {
         player2Name.addEventListener('dblclick', () => editPlayerName(player2Name));
     }
     
-    // Controles do jogo
+    // Controles do jogo (mouse e touch)
     if (gameArea) {
         gameArea.addEventListener('mousemove', handleMouseMove);
+        // Touch events para mobile/tablet
+        gameArea.addEventListener('touchmove', handleTouchMove, { passive: false });
+        gameArea.addEventListener('touchstart', handleTouchStart, { passive: false });
     }
     document.addEventListener('keydown', handleKeyDown);
     
@@ -507,6 +510,7 @@ function createEmojiPalette() {
 }
 
 function setupCustomizationDragDrop() {
+    // Drag and drop para desktop
     carPreview.addEventListener('dragover', (e) => {
         e.preventDefault();
     });
@@ -522,6 +526,24 @@ function setupCustomizationDragDrop() {
         addEmojiToCar(draggedEmoji, x, y);
         draggedEmoji = null;
     });
+    
+    // Touch events para mobile/tablet
+    carPreview.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        if (!touch) return;
+        
+        const element = e.target;
+        if (element.classList.contains('emoji-item')) {
+            // Iniciar arrasto de emoji
+            draggedEmoji = element.textContent;
+            const rect = carPreview.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            addEmojiToCar(draggedEmoji, x, y);
+            draggedEmoji = null;
+        }
+    }, { passive: false });
 }
 
 function addEmojiToCar(emoji, x, y) {
@@ -554,6 +576,7 @@ function makeEmojiDraggable(element) {
     let isDragging = false;
     let startX, startY, startLeft, startTop;
     
+    // Mouse events (desktop)
     element.addEventListener('mousedown', (e) => {
         isDragging = true;
         startX = e.clientX;
@@ -565,12 +588,41 @@ function makeEmojiDraggable(element) {
         document.addEventListener('mouseup', stopDrag);
     });
     
+    // Touch events (mobile/tablet)
+    element.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        isDragging = true;
+        const touch = e.touches[0];
+        startX = touch.clientX;
+        startY = touch.clientY;
+        startLeft = parseFloat(element.style.left) || 0;
+        startTop = parseFloat(element.style.top) || 0;
+        
+        document.addEventListener('touchmove', doDragTouch, { passive: false });
+        document.addEventListener('touchend', stopDrag);
+    }, { passive: false });
+    
     function doDrag(e) {
         if (!isDragging) return;
         
         const rect = carPreview.getBoundingClientRect();
         const newX = startLeft + (e.clientX - startX);
         const newY = startTop + (e.clientY - startY);
+        
+        element.style.left = Math.max(0, Math.min(carPreview.offsetWidth - 30, newX)) + 'px';
+        element.style.top = Math.max(0, Math.min(carPreview.offsetHeight - 30, newY)) + 'px';
+    }
+    
+    function doDragTouch(e) {
+        if (!isDragging) return;
+        e.preventDefault();
+        
+        const touch = e.touches[0];
+        if (!touch) return;
+        
+        const rect = carPreview.getBoundingClientRect();
+        const newX = startLeft + (touch.clientX - startX);
+        const newY = startTop + (touch.clientY - startY);
         
         element.style.left = Math.max(0, Math.min(carPreview.offsetWidth - 30, newX)) + 'px';
         element.style.top = Math.max(0, Math.min(carPreview.offsetHeight - 30, newY)) + 'px';
@@ -591,14 +643,30 @@ function makeEmojiDraggable(element) {
         
         document.removeEventListener('mousemove', doDrag);
         document.removeEventListener('mouseup', stopDrag);
+        document.removeEventListener('touchmove', doDragTouch);
+        document.removeEventListener('touchend', stopDrag);
     }
     
-    // Remover emoji com duplo clique
+    // Remover emoji com duplo clique ou toque longo
     element.addEventListener('dblclick', () => {
         const emojiId = element.dataset.id;
         myCustomization.emojis = myCustomization.emojis.filter(e => e.id != emojiId);
         element.remove();
         syncCustomization();
+    });
+    
+    // Touch: toque longo para remover
+    let longPressTimer;
+    element.addEventListener('touchstart', (e) => {
+        longPressTimer = setTimeout(() => {
+            const emojiId = element.dataset.id;
+            myCustomization.emojis = myCustomization.emojis.filter(e => e.id != emojiId);
+            element.remove();
+            syncCustomization();
+        }, 800); // 800ms para toque longo
+    });
+    element.addEventListener('touchend', () => {
+        clearTimeout(longPressTimer);
     });
 }
 
@@ -952,6 +1020,34 @@ function handleMouseMove(e) {
     myCar.style.transition = 'none';
     myCar.style.left = mouseX + 'px';
     socket.emit('playerMove', { roomCode: currentRoomCode, x: mouseX });
+}
+
+// Touch events para mobile/tablet
+function handleTouchStart(e) {
+    if (!gameStarted || !myCar) return;
+    e.preventDefault();
+    handleTouchMove(e);
+}
+
+function handleTouchMove(e) {
+    if (!gameStarted || !myCar) return;
+    e.preventDefault();
+    
+    const now = Date.now();
+    if (now - lastMoveTime < MOVE_THROTTLE) return;
+    lastMoveTime = now;
+    
+    const touch = e.touches[0] || e.changedTouches[0];
+    if (!touch) return;
+    
+    const rect = gameArea.getBoundingClientRect();
+    let touchX = touch.clientX - rect.left;
+    touchX = Math.max(LEFT_LIMIT, Math.min(RIGHT_LIMIT, touchX - CAR_WIDTH / 2));
+    
+    // Atualização direta sem transição
+    myCar.style.transition = 'none';
+    myCar.style.left = touchX + 'px';
+    socket.emit('playerMove', { roomCode: currentRoomCode, x: touchX });
 }
 
 function handleKeyDown(e) {
